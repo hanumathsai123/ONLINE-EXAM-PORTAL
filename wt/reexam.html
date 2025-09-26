@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Re-Exam — Online Exam Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+body{margin:0;font-family:Inter,Arial;background:linear-gradient(180deg,#f8fafc,#fff);padding:20px}
+.container{max-width:900px;margin:auto;background:#fff;padding:18px;border-radius:12px;box-shadow:0 10px 28px rgba(10,20,60,.06)}
+.header{display:flex;justify-content:space-between;align-items:center}
+.header h1{color:#2563eb;margin:0}
+.card{margin-top:12px;padding:12px;border-radius:10px;border:1px solid #eef3ff}
+.input{padding:10px;border-radius:8px;border:1px solid #eef3ff;width:100%;margin-top:8px}
+.btn{background:#2563eb;color:#fff;padding:10px;border-radius:8px;border:0;cursor:pointer;margin-top:10px}
+.nav{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.nav .num{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;border:1px solid #eef3ff;background:#fbfdff;cursor:pointer}
+.main{margin-top:12px}
+.option{display:block;padding:10px;border-radius:8px;border:1px solid #eef3ff;margin-top:10px;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header"><h1>Re-Exam</h1><div class="note">Only students marked for re-exam can attempt.</div></div>
+
+  <div id="login" class="card">
+    <div><strong>Re-Exam Login</strong></div>
+    <input id="rreg" class="input" placeholder="Registration No">
+    <input id="rcode" class="input" placeholder="Re-Exam Code">
+    <input id="rotp" class="input" placeholder="Re-Exam OTP">
+    <button class="btn" onclick="startReExam()">Start Re-Exam</button>
+    <div id="rmsg" style="color:red;margin-top:8px"></div>
+  </div>
+
+  <div id="exam" class="card" style="display:none">
+    <div id="nav" class="nav"></div>
+    <div id="qbox" class="main"></div>
+    <div style="margin-top:12px"><button class="btn" onclick="prevR()">Previous</button> <button class="btn" onclick="nextR()">Next</button> <button class="btn" style="background:#16a34a" onclick="submitReExam()">Submit</button></div>
+  </div>
+</div>
+
+<script>
+let reData = JSON.parse(localStorage.getItem('reExamData')) || null;
+let reList = JSON.parse(localStorage.getItem('reExamList')) || [];
+let rQuestions = [], rAnswers = [], rIndex=0, rReg='';
+
+function startReExam(){
+  rReg = String(document.getElementById('rreg').value).trim();
+  const code = document.getElementById('rcode').value.trim();
+  const otp = document.getElementById('rotp').value.trim();
+  if(!rReg || !code || !otp){ document.getElementById('rmsg').innerText='Enter details'; return; }
+  // check eligibility
+  if(!reList.includes(rReg)){ document.getElementById('rmsg').innerText='You are not marked for re-exam'; return; }
+  // check reExamData
+  const data = JSON.parse(localStorage.getItem('reExamData')) || {};
+  if(!data.otp || !data.questions || data.code!==code || String(data.otp)!==String(otp)){ document.getElementById('rmsg').innerText='Invalid re-exam code or OTP'; return; }
+  rQuestions = data.questions; rAnswers=new Array(rQuestions.length).fill(null);
+  document.getElementById('login').style.display='none';
+  document.getElementById('exam').style.display='block';
+  renderNav();
+  showR(0);
+}
+
+function renderNav(){
+  const nav = document.getElementById('nav'); nav.innerHTML='';
+  rQuestions.forEach((_,i)=>{ const d=document.createElement('div'); d.className='num'; d.innerText=i+1; d.onclick=(()=>showR(i)); nav.appendChild(d); });
+}
+
+function showR(i){
+  rIndex=i;
+  const q = rQuestions[i];
+  const box = document.getElementById('qbox');
+  box.innerHTML = `<div style="font-weight:700">Q${i+1}. ${escapeHtml(q.q)}</div>` + 
+    q.options.map((opt,idx)=>`<label class="option"><input type="radio" name="ropt" value="${idx+1}" ${rAnswers[i]===idx+1?'checked':''} onchange="pickR(${idx+1})"> ${escapeHtml(opt)}</label>`).join('');
+}
+
+function pickR(v){ rAnswers[rIndex]=v; }
+function nextR(){ if(rIndex<rQuestions.length-1) showR(rIndex+1); }
+function prevR(){ if(rIndex>0) showR(rIndex-1); }
+
+function submitReExam(){
+  let score=0; for(let i=0;i<rQuestions.length;i++) if(rAnswers[i] && Number(rAnswers[i])===Number(rQuestions[i].correct)) score++;
+  const arr = JSON.parse(localStorage.getItem('reExamAttempts')) || [];
+  arr.push({ reg:rReg, score, total:rQuestions.length, timestamp:new Date().toISOString() });
+  localStorage.setItem('reExamAttempts', JSON.stringify(arr));
+  // remove from reExamList
+  let list = JSON.parse(localStorage.getItem('reExamList')) || [];
+  list = list.filter(x=> x!==rReg);
+  localStorage.setItem('reExamList', JSON.stringify(list));
+  alert('Re-Exam submitted! Score: '+score+'/'+rQuestions.length);
+  location.href='index.html';
+}
+
+function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+</script>
+</body>
+</html>

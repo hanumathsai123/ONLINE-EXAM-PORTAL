@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Re-Exam Student Portal</title>
+<style>
+body { font-family: Arial, sans-serif; background: #f4f4f4; margin: 0; padding: 20px; }
+.container { max-width: 700px; margin: auto; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+input, button { margin: 10px 0; padding: 10px; width: 100%; }
+button { background: #007bff; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+button:hover { background: #0056b3; }
+.nav-box { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: 15px; }
+.nav-box button { width: 40px; height: 40px; border-radius: 50%; font-size: 16px; }
+.question { margin-bottom: 15px; }
+</style>
+</head>
+<body>
+
+<div class="container" id="loginBox">
+<h2>Re-Exam Login</h2>
+<input type="number" id="regNo" placeholder="Enter Registration No">
+<input type="text" id="otpInput" placeholder="Enter Re-Exam OTP">
+<button onclick="startReExam()">Start Re-Exam</button>
+<p id="errorMsg" style="color:red;"></p>
+<button onclick="window.location.href='index.html'">Back to Home</button>
+</div>
+
+<div class="container" id="examBox" style="display:none;">
+<h2>Re-Exam</h2>
+<div class="nav-box" id="questionNav"></div>
+<div id="questionArea"></div>
+<button onclick="prevQuestion()">Previous</button>
+<button onclick="nextQuestion()">Next</button>
+<br><br>
+<button onclick="submitReExam()">Submit Exam</button>
+</div>
+
+<script>
+let reExamQuestions = [];
+let currentIndex = 0;
+let answers = {};
+
+function startReExam(){
+    const reg = document.getElementById('regNo').value;
+    const otp = document.getElementById('otpInput').value;
+
+    const reExamData = JSON.parse(localStorage.getItem('reExamData')) || {};
+    if(!reExamData.otp || !reExamData.questions){
+        document.getElementById('errorMsg').innerText = 'Re-Exam not set by Faculty';
+        return;
+    }
+
+    if(otp !== reExamData.otp){
+        document.getElementById('errorMsg').innerText = 'Invalid OTP';
+        return;
+    }
+
+    reExamQuestions = reExamData.questions;
+    if(reExamQuestions.length === 0){
+        document.getElementById('errorMsg').innerText = 'No questions available for re-exam';
+        return;
+    }
+
+    document.getElementById('loginBox').style.display = 'none';
+    document.getElementById('examBox').style.display = 'block';
+    loadNavButtons();
+    showQuestion(0);
+}
+
+function loadNavButtons(){
+    let navHTML = '';
+    for(let i=0; i<reExamQuestions.length; i++){
+        navHTML += `<button onclick="showQuestion(${i})">${i+1}</button>`;
+    }
+    document.getElementById('questionNav').innerHTML = navHTML;
+}
+
+function showQuestion(index){
+    currentIndex = index;
+    const q = reExamQuestions[index];
+    let html = `<div class="question"><p><b>${index+1}. ${q.q}</b></p>`;
+    q.options.forEach((opt, idx)=>{
+        const checked = answers[index] == (idx+1) ? 'checked' : '';
+        html += `<input type="radio" name="q${index}" value="${idx+1}" ${checked} onclick="saveAnswer(${index},${idx+1})"> ${opt}<br>`;
+    });
+    html += `</div>`;
+    document.getElementById('questionArea').innerHTML = html;
+}
+
+function saveAnswer(index, value){
+    answers[index] = value;
+}
+
+function prevQuestion(){
+    if(currentIndex > 0){
+        showQuestion(currentIndex - 1);
+    }
+}
+
+function nextQuestion(){
+    if(currentIndex < reExamQuestions.length - 1){
+        showQuestion(currentIndex + 1);
+    }
+}
+
+function submitReExam(){
+    let score = 0;
+    reExamQuestions.forEach((q, i)=>{
+        if(answers[i] && answers[i] == q.correct){
+            score++;
+        }
+    });
+
+    const attempts = JSON.parse(localStorage.getItem('reExamAttempts')) || [];
+    attempts.push({
+        reg: document.getElementById('regNo').value,
+        score: score,
+        total: reExamQuestions.length
+    });
+    localStorage.setItem('reExamAttempts', JSON.stringify(attempts));
+
+    alert(`Re-Exam Submitted! Score: ${score}/${reExamQuestions.length}`);
+    window.location.href = 'index.html';
+}
+</script>
+</body>
+</html>

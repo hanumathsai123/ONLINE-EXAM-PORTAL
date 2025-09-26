@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Faculty Dashboard — Online Exam Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- jsPDF & autotable for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.29/jspdf.plugin.autotable.min.js"></script>
+
+<style>
+:root{
+  --card:#fff; --accent:#2563eb; --muted:#64748b;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Segoe UI,Arial;background:linear-gradient(135deg,#eef2ff,#fff);padding:20px}
+.container{max-width:1200px;margin:auto;background:var(--card);border-radius:12px;padding:18px;box-shadow:0 14px 40px rgba(10,20,60,.08); animation:fadeIn .45s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.header{display:flex;align-items:center;justify-content:space-between}
+.header h1{color:var(--accent);margin:0}
+.tabs{display:flex;gap:8px;margin:20px 0}
+.tab{padding:10px 16px;border-radius:10px;background:#f3f7ff;color:var(--accent);font-weight:700;cursor:pointer;transition:all .15s}
+.tab.active{background:var(--accent);color:#fff;box-shadow:0 8px 24px rgba(37,99,235,.14)}
+.grid{display:grid;grid-template-columns:260px 1fr;gap:16px}
+.side{padding:12px;border-radius:10px;background:#fbfdff;border:1px solid #eef3ff}
+.main{padding:12px;border-radius:10px;background:#fff;border:1px solid #eef3ff}
+.btn{background:var(--accent);color:#fff;padding:10px 12px;border-radius:8px;border:0;cursor:pointer;margin-right:8px}
+.secondary{background:#e6eefc;color:var(--accent);font-weight:700}
+.input{width:100%;padding:8px;margin:8px 0;border-radius:8px;border:1px solid #e6eefc}
+.qnav{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.qnum{padding:8px;border-radius:8px;background:#f8fbff;border:1px dashed #e6eefc;cursor:pointer;text-align:center}
+.qnum.active{background:var(--accent);color:#fff;box-shadow:0 10px 30px rgba(37,99,235,.12)}
+.question-box input{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px solid #eee}
+.table{width:100%;border-collapse:collapse;margin-top:12px}
+.table th,.table td{padding:8px;border-bottom:1px solid #eef3ff;text-align:center}
+.actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+.note{color:var(--muted);font-size:13px}
+.logout{background:#ff6b6b}
+.footer{margin-top:18px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="container" id="app">
+
+  <div class="header">
+    <h1>Faculty Dashboard</h1>
+    <div>
+      <span class="note">Logged in as: <strong id="facultyIdLabel">-</strong></span>
+      <button class="btn logout" onclick="logout()" id="logoutBtn" style="display:none">Logout</button>
+    </div>
+  </div>
+
+  <!-- LOGIN CARD -->
+  <div id="loginCard" style="margin-top:16px">
+    <div class="main">
+      <h2>Faculty Login</h2>
+      <input id="fid" class="input" placeholder="Faculty ID (e.g. 1001)" />
+      <input id="fpass" class="input" type="password" placeholder="Enter admin password (admin123)" />
+      <div class="actions">
+        <button class="btn" onclick="facultyLogin()">Login</button>
+      
+      </div>
+      <p id="loginMsg" class="note" style="color:#d9534f"></p>
+    </div>
+  </div>
+
+  <!-- DASHBOARD (hidden until login) -->
+  <div id="dashboard" style="display:none;margin-top:20px">
+    <div class="tabs" role="tablist">
+      <div class="tab active" data-tab="main" onclick="switchTab('main')">Main Exam</div>
+      <div class="tab" data-tab="re" onclick="switchTab('re')">Re-Exam</div>
+      <div class="tab" data-tab="reports" onclick="switchTab('reports')">Reports</div>
+    </div>
+
+    <!-- MAIN EXAM -->
+    <div id="main" class="section active">
+      <div class="grid">
+        <div class="side">
+          <div><strong>Main Exam Code</strong></div>
+          <input id="mainCode" class="input" placeholder="Enter exam code (e.g. MATH101)">
+          <div class="note">Question navigation</div>
+          <div id="mainNav" class="qnav"></div>
+          <div style="margin-top:10px"><button class="btn secondary" onclick="addQuestion('main')">+ Add Q</button></div>
+        </div>
+
+        <div class="main">
+          <h3>Main Exam — Question Editor</h3>
+          <div class="question-box" id="mainEditor">
+            <!-- dynamic inputs -->
+            <div class="note">Add questions using the "+ Add Q" button and navigate using the left panel.</div>
+          </div>
+
+          <div class="actions">
+            <button class="btn" onclick="saveExam('main')">Save Main Exam & Generate OTP</button>
+            <button class="btn" onclick="clearMainDraft()">Clear Draft</button>
+            <div id="mainOtpMsg" class="note" style="margin-left:8px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RE-EXAM -->
+    <div id="re" class="section" style="display:none">
+      <div class="grid">
+        <div class="side">
+          <div><strong>Re-Exam Code</strong></div>
+          <input id="reCode" class="input" placeholder="Enter re-exam code">
+          <div class="note">Students marked for re-exam:</div>
+          <div id="absentList" style="margin-top:6px;color:#0b6bef"></div>
+          <div style="margin-top:10px"><button class="btn secondary" onclick="addQuestion('re')">+ Add Re-Q</button></div>
+        </div>
+
+        <div class="main">
+          <h3>Re-Exam — Question Editor</h3>
+          <div id="reEditor" class="question-box">
+            <div class="note">Create new questions for re-exam. Save to generate OTP for re-exam.</div>
+          </div>
+
+          <div class="actions">
+            <button class="btn" onclick="saveExam('re')">Save Re-Exam & Generate OTP</button>
+            <button class="btn" onclick="clearReDraft()">Clear Draft</button>
+            <div id="reOtpMsg" class="note" style="margin-left:8px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPORTS -->
+    <div id="reports" class="section" style="display:none">
+      <h3>Combined Reports</h3>
+      <div id="reportArea" class="main">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="note">Combined Main + Re-Exam attempts</div>
+          <div>
+            <button class="btn" onclick="generateCombinedReport()">Refresh</button>
+            <button class="btn" onclick="downloadCombinedPDF()">Download PDF</button>
+          </div>
+        </div>
+
+        <div id="reportTables" style="margin-top:12px"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="footer"></div>
+</div>
+
+<script>
+/* ---------- Security / Login ---------- */
+const ADMIN_PASS = 'admin123'; // default admin password (change if needed)
+function facultyLogin(){
+  const fid = document.getElementById('fid').value.trim();
+  const pass = document.getElementById('fpass').value.trim();
+  if(!fid || !pass){ document.getElementById('loginMsg').innerText = 'Enter ID and password'; return; }
+  if(pass !== ADMIN_PASS){ document.getElementById('loginMsg').innerText = 'Invalid password'; return; }
+  sessionStorage.setItem('facultyLogged', fid);
+  document.getElementById('facultyIdLabel').innerText = fid;
+  document.getElementById('loginCard').style.display='none';
+  document.getElementById('dashboard').style.display='block';
+  document.getElementById('logoutBtn').style.display='inline-block';
+  loadDrafts();
+  loadAbsentList();
+}
+
+/* logout */
+function logout(){ sessionStorage.removeItem('facultyLogged'); location.href='index.html'; }
+
+/* block direct access to dashboard if not logged (on page load) */
+if(sessionStorage.getItem('facultyLogged')) {
+  document.addEventListener('DOMContentLoaded', ()=> {
+    document.getElementById('facultyIdLabel').innerText = sessionStorage.getItem('facultyLogged');
+    document.getElementById('loginCard').style.display='none';
+    document.getElementById('dashboard').style.display='block';
+    document.getElementById('logoutBtn').style.display='inline-block';
+    loadDrafts();
+    loadAbsentList();
+  });
+}
+
+/* ---------- Tabs ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.style.display='none');
+  document.querySelector(`[data-tab="${name}"]`).classList.add('active');
+  document.getElementById(name).style.display = 'block';
+  if(name==='re') loadAbsentList();
+  if(name==='reports') generateCombinedReport();
+}
+
+/* ---------- Question Data Model ---------- */
+// We'll keep "draft" arrays in memory while editing; saving writes to localStorage
+let mainDraft = JSON.parse(localStorage.getItem('mainDraft')) || [];
+let reDraft = JSON.parse(localStorage.getItem('reDraft')) || [];
+let mainIndex = 0, reIndex = 0;
+
+/* ---------- UI Helpers ---------- */
+function createQuestionEditor(type, index, containerId){
+  const q = (type==='main') ? mainDraft[index] : reDraft[index];
+  const cont = document.getElementById(containerId);
+  cont.innerHTML = `
+    <label class="note">Q${index+1}</label>
+    <input placeholder="Question text" value="${escape(q.q)}" onchange="updateField('${type}',${index},'q',this.value)"/>
+    <input placeholder="Option 1" value="${escape(q.options[0])}" onchange="updateOption('${type}',${index},0,this.value)"/>
+    <input placeholder="Option 2" value="${escape(q.options[1])}" onchange="updateOption('${type}',${index},1,this.value)"/>
+    <input placeholder="Option 3" value="${escape(q.options[2])}" onchange="updateOption('${type}',${index},2,this.value)"/>
+    <input placeholder="Option 4" value="${escape(q.options[3])}" onchange="updateOption('${type}',${index},3,this.value)"/>
+    <input type="number" min="1" max="4" placeholder="Correct option (1-4)" value="${q.correct}" onchange="updateField('${type}',${index},'correct',this.value)"/>
+  `;
+}
+
+/* escape helper for values in attributes */
+function escape(s){ return (s||'').replaceAll('"','&quot;').replaceAll("'",'&#39;'); }
+function unescapeHTML(s){ return (s||'').replaceAll('&quot;','"').replaceAll('&#39;',"'"); }
+
+/* ---------- Add / Update / Navigation ---------- */
+function addQuestion(type){
+  if(type==='main'){
+    mainDraft.push({ q:'', options:['','','',''], correct:1});
+    mainIndex = mainDraft.length -1;
+    persistDrafts();
+    renderNav('main');
+    createQuestionEditor('main', mainIndex, 'mainEditor');
+  } else {
+    reDraft.push({ q:'', options:['','','',''], correct:1});
+    reIndex = reDraft.length -1;
+    persistDrafts();
+    renderNav('re');
+    createQuestionEditor('re', reIndex, 'reEditor');
+  }
+}
+
+function updateField(type,i,field,val){
+  val = (field==='correct') ? Number(val) : val;
+  if(type==='main'){ mainDraft[i][field]=val; persistDrafts(); renderNav('main'); }
+  else { reDraft[i][field]=val; persistDrafts(); renderNav('re'); }
+}
+function updateOption(type,i,optIndex,val){
+  if(type==='main'){ mainDraft[i].options[optIndex]=val; persistDrafts(); }
+  else { reDraft[i].options[optIndex]=val; persistDrafts(); }
+}
+
+/* Navigation UI */
+function renderNav(type){
+  const nav = (type==='main') ? document.getElementById('mainNav') : document.getElementById('reNav');
+  nav.innerHTML='';
+  const arr = (type==='main') ? mainDraft : reDraft;
+  arr.forEach((_,i)=>{
+    const btn = document.createElement('div');
+    btn.className='qnum'+( (type==='main' && i===mainIndex) || (type==='re' && i===reIndex) ? ' active' : '');
+    btn.innerText = i+1;
+    btn.onclick = ()=>{ if(type==='main'){ mainIndex=i; createQuestionEditor('main',i,'mainEditor'); } else { reIndex=i; createQuestionEditor('re',i,'reEditor'); } renderNav(type); };
+    nav.appendChild(btn);
+  });
+}
+
+/* persist draft to localStorage (for safe editing) */
+function persistDrafts(){
+  localStorage.setItem('mainDraft', JSON.stringify(mainDraft));
+  localStorage.setItem('reDraft', JSON.stringify(reDraft));
+}
+
+/* load drafts into UI */
+function loadDrafts(){
+  mainDraft = JSON.parse(localStorage.getItem('mainDraft')) || [];
+  reDraft = JSON.parse(localStorage.getItem('reDraft')) || [];
+  if(mainDraft.length>0){ renderNav('main'); createQuestionEditor('main',0,'mainEditor'); }
+  if(reDraft.length>0){ renderNav('re'); createQuestionEditor('re',0,'reEditor'); }
+}
+
+/* clear drafts */
+function clearMainDraft(){ if(confirm('Clear main draft?')){ mainDraft=[]; localStorage.removeItem('mainDraft'); document.getElementById('mainEditor').innerHTML=''; renderNav('main'); } }
+function clearReDraft(){ if(confirm('Clear re-exam draft?')){ reDraft=[]; localStorage.removeItem('reDraft'); document.getElementById('reEditor').innerHTML=''; renderNav('re'); } }
+
+/* ---------- Save Exams (persist to exams / reExams in localStorage) ---------- */
+function saveExam(type){
+  const code = (type==='main') ? document.getElementById('mainCode').value.trim() : document.getElementById('reCode').value.trim();
+  if(!code){ alert('Enter exam code'); return; }
+  const arr = (type==='main') ? mainDraft : reDraft;
+  if(arr.length===0){ alert('Add questions before saving'); return; }
+  const otp = Math.floor(100000 + Math.random()*900000);
+  if(type==='main'){
+    let exams = JSON.parse(localStorage.getItem('exams')) || [];
+    exams.push({ code, otp, questions: arr });
+    localStorage.setItem('exams', JSON.stringify(exams));
+    document.getElementById('mainOtpMsg').innerText = 'Saved. OTP: ' + otp;
+    // clear draft after save
+    mainDraft=[]; localStorage.removeItem('mainDraft'); document.getElementById('mainEditor').innerHTML=''; renderNav('main');
+  } else {
+    let reExams = JSON.parse(localStorage.getItem('reExams')) || [];
+    reExams.push({ code, otp, questions: arr });
+    localStorage.setItem('reExams', JSON.stringify(reExams));
+    // also store a reExamData (latest) for reexam student page convenience
+    localStorage.setItem('reExamData', JSON.stringify({ code, otp, questions: arr }));
+    document.getElementById('reOtpMsg').innerText = 'Saved. OTP: ' + otp;
+    reDraft=[]; localStorage.removeItem('reDraft'); document.getElementById('reEditor').innerHTML=''; renderNav('re');
+  }
+}
+
+/* ---------- Absent list / marking for re-exam ---------- */
+function loadAbsentList(){
+  // for demo: predefine full student list (in prod, faculty would upload list)
+  const allowed = JSON.parse(localStorage.getItem('allowedStudents')) || ['4239','4240','4241','4242','4243','4244','4245'];
+  // attempts from main exam:
+  const attempts = JSON.parse(localStorage.getItem('attempts')) || [];
+  const presentRegs = attempts.map(a=>String(a.reg));
+  // compute absent:
+  const absent = allowed.filter(s=>!presentRegs.includes(String(s)));
+  // show
+  document.getElementById('absentList').innerText = absent.length ? absent.join(', ') : 'None';
+  // store reExamList defaults if not present:
+  if(!localStorage.getItem('reExamList')){ localStorage.setItem('reExamList', JSON.stringify(absent)); }
+}
+
+/* mark specific student for re-exam (button in reports) */
+function markForReExam(reg){
+  let list = JSON.parse(localStorage.getItem('reExamList')) || [];
+  if(!list.includes(String(reg))){ list.push(String(reg)); localStorage.setItem('reExamList', JSON.stringify(list)); alert('Marked for re-exam: ' + reg); loadAbsentList(); }
+}
+
+/* ---------- Reports ---------- */
+function generateCombinedReport(){
+  const attempts = JSON.parse(localStorage.getItem('attempts')) || [];
+  const reAttempts = JSON.parse(localStorage.getItem('reExamAttempts')) || [];
+  const reList = JSON.parse(localStorage.getItem('reExamList')) || [];
+  // build tables
+  let html = '<h4>Main Exam Attempts</h4>';
+  html += '<table class="table"><tr><th>Reg</th><th>Score</th><th>Total</th><th>TabSwitch</th><th>OTP</th></tr>';
+  attempts.forEach(a=> html += `<tr><td>${a.reg}</td><td>${a.score}</td><td>${a.total}</td><td>${a.tabSwitches||0}</td><td>${a.otp||''}</td></tr>`);
+  html += '</table>';
+
+  html += '<h4 style="margin-top:12px">Re-Exam Attempts</h4>';
+  html += '<table class="table"><tr><th>Reg</th><th>Score</th><th>Total</th><th>TabSwitch</th></tr>';
+  reAttempts.forEach(a=> html += `<tr><td>${a.reg}</td><td>${a.score}</td><td>${a.total}</td><td>${a.tabSwitches||0}</td></tr>`);
+  html += '</table>';
+
+  html += '<h4 style="margin-top:12px">Marked for Re-Exam (Absent)</h4>';
+  if(reList.length===0) html += '<div class="note">No students currently marked for re-exam.</div>'; else {
+    html += '<table class="table"><tr><th>Reg</th><th>Action</th></tr>';
+    reList.forEach(r=> html += `<tr><td>${r}</td><td><button class="btn" onclick="unmarkReExam('${r}')">Unmark</button></td></tr>`);
+    html += '</table>';
+  }
+
+  document.getElementById('reportTables').innerHTML = html;
+}
+
+/* unmark */
+function unmarkReExam(reg){
+  let list = JSON.parse(localStorage.getItem('reExamList')) || [];
+  list = list.filter(x=>x!==String(reg));
+  localStorage.setItem('reExamList', JSON.stringify(list));
+  generateCombinedReport();
+  loadAbsentList();
+}
+
+/* download combined PDF using jsPDF autoTable */
+async function downloadCombinedPDF(){
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({unit:'pt',format:'a4'});
+  doc.setFontSize(16); doc.text('Combined Exam Report',40,40);
+  const attempts = JSON.parse(localStorage.getItem('attempts')) || [];
+  if(attempts.length){
+    doc.setFontSize(12); doc.text('Main Exam Attempts',40,70);
+    const head = [['Reg','Score','Total','TabSwitches','OTP']];
+    const body = attempts.map(a=>[String(a.reg),String(a.score),String(a.total),String(a.tabSwitches||0),String(a.otp||'')]);
+    doc.autoTable({startY:90, head, body, theme:'striped', margin:{left:40,right:40}});
+  }
+  const reAttempts = JSON.parse(localStorage.getItem('reExamAttempts')) || [];
+  const afterY = doc.lastAutoTable ? doc.lastAutoTable.finalY + 20 : 150;
+  if(reAttempts.length){
+    doc.setFontSize(12); doc.text('Re-Exam Attempts',40,afterY);
+    const head2=[['Reg','Score','Total','TabSwitches']];
+    const body2 = reAttempts.map(a=>[String(a.reg),String(a.score),String(a.total),String(a.tabSwitches||0)]);
+    doc.autoTable({startY:afterY+10, head:head2, body:body2, margin:{left:40,right:40}});
+  }
+  // save
+  doc.save('combined_report.pdf');
+}
+
+/* ---------- Utilities ---------- */
+function escape(s){ return (s||'').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+function loadAbsentList(){ // ensure absent list derived from attempts and allowedStudents
+  // allowed students list from localStorage or default
+  const allowed = JSON.parse(localStorage.getItem('allowedStudents')) || ['4239','4240','4241','4242','4243','4244','4245'];
+  const attempts = JSON.parse(localStorage.getItem('attempts')) || [];
+  const present = attempts.map(a=>String(a.reg));
+  const absent = allowed.filter(s=>!present.includes(String(s)));
+  // store absent as reExamList if not present
+  if(!localStorage.getItem('reExamList')) localStorage.setItem('reExamList', JSON.stringify(absent));
+  document.getElementById('absentList').innerText = absent.length ? absent.join(', ') : 'None';
+}
+
+/* load initial data on page load */
+document.addEventListener('DOMContentLoaded', ()=>{
+  if(sessionStorage.getItem('facultyLogged')){
+    document.getElementById('facultyIdLabel').innerText = sessionStorage.getItem('facultyLogged');
+    document.getElementById('loginCard').style.display='none';
+    document.getElementById('dashboard').style.display='block';
+    document.getElementById('logoutBtn').style.display='inline-block';
+    loadDrafts(); loadAbsentList();
+  }
+});
+</script>
+</body>
+</html>

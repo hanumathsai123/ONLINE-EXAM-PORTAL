@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Student Exam — Online Exam Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{--accent:#2563eb}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,Arial;background:linear-gradient(180deg,#f8fafc,#ffffff);padding:18px}
+.wrap{max-width:1100px;margin:0 auto;background:#fff;border-radius:12px;padding:16px;box-shadow:0 12px 34px rgba(6,10,31,0.08)}
+.header{display:flex;justify-content:space-between;align-items:center}
+.header h1{color:var(--accent);margin:0}
+.card{margin-top:12px;padding:14px;border-radius:10px;border:1px solid #eef3ff;background:#fbfdff}
+.login-row{display:flex;gap:10px;flex-wrap:wrap}
+.input{padding:10px;border:1px solid #e6eefc;border-radius:8px;width:100%}
+.btn{background:var(--accent);color:#fff;padding:10px 12px;border-radius:8px;border:0;cursor:pointer}
+.layout{display:flex;gap:12px;margin-top:12px}
+.sidebar{width:160px;background:#fff;border-radius:10px;padding:10px;border:1px solid #eef3ff}
+.qbtn{display:block;width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px solid #eef3ff;background:#f8fbff;cursor:pointer}
+.qbtn.active{background:var(--accent);color:#fff}
+.main{flex:1;background:#fff;border-radius:10px;padding:12px;border:1px solid #eef3ff}
+.option{display:block;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #eef3ff;cursor:pointer}
+.controls{display:flex;justify-content:space-between;margin-top:12px}
+.timer{background:#f1f7ff;padding:6px 10px;border-radius:10px;color:var(--accent);font-weight:700}
+.small{color:#64748b;font-size:13px}
+.hidden{display:none}
+@media(max-width:880px){.layout{flex-direction:column}.sidebar{width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header"><h1>Student Exam</h1><div class="small">Ensure stable connection and stay in fullscreen</div></div>
+
+  <div id="loginCard" class="card">
+    <div style="font-weight:700">Login to start</div>
+    <div class="login-row" style="margin-top:10px">
+      <div style="flex:1"><input id="reg" class="input" type="number" placeholder="Registration No (e.g. 4239)"></div>
+      <div style="flex:1"><input id="ecode" class="input" type="text" placeholder="Exam Code"></div>
+      <div style="flex:1"><input id="eotp" class="input" type="text" placeholder="OTP"></div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <button class="btn" onclick="startExam()">Start Exam</button>
+      <div class="small">students: 4239,4240,4243,4244,4245</div>
+    </div>
+    <p id="errorMsg" style="color:crimson;margin-top:8px"></p>
+  </div>
+
+  <!-- exam area -->
+  <div id="examArea" class="hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div class="timer" id="timer">Time: --:--</div>
+      <div class="small">Reg: <span id="sreg"></span> | Exam: <span id="scode"></span></div>
+    </div>
+    <div class="layout">
+      <aside class="sidebar">
+        <div style="font-weight:700;margin-bottom:6px">Questions</div>
+        <div id="navList"></div>
+        <div style="margin-top:12px" class="small">Tab switches: <span id="tabCount">0</span> | Full exits: <span id="fullCount">0</span></div>
+      </aside>
+
+      <main class="main">
+        <div id="qArea"></div>
+        <div class="controls">
+          <div><button class="btn" onclick="prevQ()">Previous</button> <button class="btn" onclick="nextQ()">Next</button></div>
+          <div><button class="btn" style="background:#16a34a" onclick="submitExam()">Submit</button></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* PARAMETERS */
+const ALLOWED = JSON.parse(localStorage.getItem('allowedStudents')) || ['4239','4240','4241','4242','4243','4244','4245'];
+const TIMER_MINUTES = 15; // default exam time in minutes; change if needed
+
+/* STATE */
+let exam=null, answers=[], current=0, regNo='', code='', otp='', started=false;
+let tabSwitches=0, fullExits=0, timerInterval=null, timeLeftSec=0;
+
+/* HELPERS */
+function $(id){return document.getElementById(id)}
+function formatTime(s){ const m=Math.floor(s/60); const ss=s%60; return `${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`}
+
+/* START */
+function startExam(){
+  $('errorMsg').innerText='';
+  regNo = String($('reg').value).trim(); code = $('ecode').value.trim(); otp = $('eotp').value.trim();
+  if(!regNo || !code || !otp){ $('errorMsg').innerText='Enter registration number, code and OTP'; return; }
+  if(!ALLOWED.includes(regNo)){ $('errorMsg').innerText='You are not in allowed student list'; return; }
+  const exams = JSON.parse(localStorage.getItem('exams')) || [];
+  const found = exams.find(e=> e.code===code && String(e.otp)===String(otp));
+  if(!found){ $('errorMsg').innerText='Invalid exam code or OTP'; return; }
+  exam = found;
+  answers = new Array(exam.questions.length).fill(null); current=0;
+  $('loginCard').classList.add('hidden'); $('examArea').classList.remove('hidden');
+  $('sreg').innerText = regNo; $('scode').innerText = code;
+  renderNav(); showQuestion(0);
+  // start timer
+  timeLeftSec = TIMER_MINUTES * 60;
+  $('timer').innerText = 'Time: '+formatTime(timeLeftSec);
+  timerInterval = setInterval(()=>{ timeLeftSec--; $('timer').innerText='Time: '+formatTime(timeLeftSec); if(timeLeftSec<=0){ clearInterval(timerInterval); alert('Time up! Submitting exam'); submitExam(); } },1000);
+  // security handlers
+  started = true;
+  window.addEventListener('blur', onBlur);
+  document.addEventListener('visibilitychange', onVisibilityChange);
+  document.addEventListener('fullscreenchange', onFullChange);
+  window.addEventListener('contextmenu', blockContext);
+  window.addEventListener('keydown', blockShortcuts);
+  // enforce fullscreen
+  document.documentElement.requestFullscreen().catch(()=>{ alert('Please enable fullscreen for proper exam proctoring'); });
+}
+
+/* NAV & QUESTION RENDER */
+function renderNav(){
+  const nav = $('navList'); nav.innerHTML='';
+  for(let i=0;i<exam.questions.length;i++){
+    const b = document.createElement('button'); b.className='qbtn'+(i===current?' active':''); b.textContent = i+1;
+    b.onclick = ()=>{ saveAnswerFromUI(); showQuestion(i); };
+    nav.appendChild(b);
+  }
+}
+function showQuestion(i){
+  if(i<0||i>=exam.questions.length) return;
+  current=i; renderNav();
+  const q = exam.questions[i];
+  const html = `<div style="font-weight:700">Q${i+1}. ${escapeHtml(q.q)}</div>
+    <div style="margin-top:10px">${q.options.map((opt,idx)=>`<label class="option"><input type="radio" name="opt" value="${idx+1}" ${answers[i]===idx+1?'checked':''} onchange="selectOpt(${idx+1})"> ${escapeHtml(opt)}</label>`).join('')}</div>`;
+  $('qArea').innerHTML = html;
+}
+function selectOpt(v){ answers[current] = v; }
+function saveAnswerFromUI(){ /* radios already update answers via selectOpt */ }
+function nextQ(){ if(current<exam.questions.length-1) showQuestion(current+1); }
+function prevQ(){ if(current>0) showQuestion(current-1); }
+function escapeHtml(s){ return (s||'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+/* SECURITY HANDLERS */
+function onBlur(){ if(started){ tabSwitches++; $('tabCount').innerText = tabSwitches; alert('Tab change detected! This will be recorded.'); } }
+function onVisibilityChange(){ if(document.hidden && started){ tabSwitches++; $('tabCount').innerText = tabSwitches; alert('Tab change detected! This will be recorded.'); } }
+function onFullChange(){ if(started && !document.fullscreenElement){ fullExits++; $('fullCount').innerText = fullExits; alert('You exited fullscreen — returning now.'); setTimeout(()=>document.documentElement.requestFullscreen().catch(()=>{}),300); } }
+function blockContext(e){ if(started) e.preventDefault(); }
+function blockShortcuts(e){ if(!started) return; if(e.key==='F12' || ((e.ctrlKey||e.metaKey) && ['c','v','x','u','s','p'].includes(e.key.toLowerCase()))){ e.preventDefault(); alert('This action is disabled during the exam'); } }
+
+/* SUBMIT */
+function submitExam(){
+  if(!started) return;
+  clearInterval(timerInterval);
+  let score=0;
+  for(let i=0;i<exam.questions.length;i++){ if(answers[i] && Number(answers[i])===Number(exam.questions[i].correct)) score++; }
+  const attempts = JSON.parse(localStorage.getItem('attempts')) || [];
+  attempts.push({ reg: regNo, score, total: exam.questions.length, tabSwitches, fullExits, otp, code, timestamp: new Date().toISOString() });
+  localStorage.setItem('attempts', JSON.stringify(attempts));
+  // remove from reExamList if present
+  let reList = JSON.parse(localStorage.getItem('reExamList')) || [];
+  reList = reList.filter(x=> x !== regNo);
+  localStorage.setItem('reExamList', JSON.stringify(reList));
+  alert('Submitted! Score: '+score+'/'+exam.questions.length);
+  cleanup();
+  window.location.href='index.html';
+}
+
+/* CLEANUP */
+function cleanup(){
+  started=false;
+  window.removeEventListener('blur', onBlur);
+  document.removeEventListener('visibilitychange', onVisibilityChange);
+  document.removeEventListener('fullscreenchange', onFullChange);
+  window.removeEventListener('contextmenu', blockContext);
+  window.removeEventListener('keydown', blockShortcuts);
+}
+
+/* Prevent accidental refresh/close */
+window.addEventListener('beforeunload', function(e){
+  if(started){ e.preventDefault(); e.returnValue='Exam in progress — leave and your attempt will be recorded as is.'; }
+});
+</script>
+</body>
+</html>
